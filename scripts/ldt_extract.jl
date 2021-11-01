@@ -1,5 +1,7 @@
 using CSV, DataFrames
 
+const DATADIR = "./ldt_raw";
+
 const SKIPLIST = [  # list of redundant or questionable files
     "9999.LDT",
     "793DATA.LDT",
@@ -8,8 +10,13 @@ const SKIPLIST = [  # list of redundant or questionable files
     "Data1010.LDT",
     "Data1016.LDT",
     "Data1988.LDT",
-]
+];
 
+"""
+    checktbuf(buf::IOBuffer)
+
+Return a DataFrame of the contents of `buf` assuming it contains trial information
+"""
 function checktbuf(buf)
     return(
         DataFrame(
@@ -23,8 +30,18 @@ function checktbuf(buf)
     )
 end
 
+"""
+    checkhbuf(buf::IOBuffer, types::Vector)
+
+Return a DataFrame from CSV.File of IOBuffer `buf` assuming `types`
+"""
 checkhbuf(buf, types) = DataFrame(CSV.File(take!(buf); types))
 
+"""
+    skipblanks(strm)
+
+Skip blank lines in strm returning the first non-blank line with `keep=true`
+"""
 function skipblanks(strm)
     ln = readline(strm; keep=true)
     while isempty(strip(ln))
@@ -33,7 +50,12 @@ function skipblanks(strm)
     return ln
 end
 
-function parse_ldt_file(fnm)
+"""
+    parse_ldt_file(fnm)
+
+Return a NamedTuple of `fnm` and 6 DataFrames from LDT file with path `fnm`
+"""
+function parse_ldt_file(fnm, dir=DATADIR)
     @show fnm
     global univ, sess1, sess2, subj, ncor, hlth
     hdrbuf, trialbuf = IOBuffer(), IOBuffer()        # in-memory "files"
@@ -42,7 +64,7 @@ function parse_ldt_file(fnm)
     ncorhdr = "numCorrect,rawScore,vocabAge,shipTime,readTime"
     hlthhdr = "presHealth,pastHealth,vision,hearing,firstLang"
     keep = true                                      # pass as named argument to readline
-    strm = open(fnm, "r")
+    strm = open(joinpath(dir, fnm), "r")
     ln = readline(strm; keep)
     if !startswith(ln, univhdr)
         throw(ArgumentError("$fnm does not start with expected header"))
@@ -80,8 +102,5 @@ function parse_ldt_file(fnm)
     return (; fnm, univ, sess1, sess2, subj, ncor, hlth)
 end
 
-const DATADIR = "./ldt_raw-1";
-
-for nm in filter(∉(SKIPLIST), filter(endswith(r"LDT"i), readdir(DATADIR)))
-    parse_ldt_file(joinpath(DATADIR, nm))
-end
+dfs =
+[parse_ldt_file(nm) for nm in filter(∉(SKIPLIST), filter(endswith(r"LDT"i), readdir(DATADIR)))];
