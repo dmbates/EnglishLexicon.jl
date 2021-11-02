@@ -9,7 +9,6 @@ const SKIPLIST = [  # list of redundant or questionable files
     "Data1000.LDT",
     "Data1010.LDT",
     "Data1016.LDT",
-    "Data1988.LDT",
 ];
 
 """
@@ -29,13 +28,6 @@ function checktbuf(buf)
         )
     )
 end
-
-"""
-    checkhbuf(buf::IOBuffer, types::Vector)
-
-Return a DataFrame from CSV.File of IOBuffer `buf` assuming `types`
-"""
-checkhbuf(buf, types) = DataFrame(CSV.File(take!(buf); types))
 
 """
     skipblanks(strm)
@@ -75,23 +67,40 @@ function parse_ldt_file(fnm, dir=DATADIR)
     while true     # loop over lines in file
         if startswith(ln, univhdr)   # header for session 2
             write(hdrbuf, readline(strm; keep))   # second line of univ data
-            univ = checkhbuf(hdrbuf, [Int8, String, String, Int16, String, Int16])
+            univ = DataFrame(CSV.File(
+                take!(hdrbuf);
+                types=[Int8, String, String, Int16, String, Int16],
+                ),
+            )
             sess1 = checktbuf(trialbuf)
         elseif startswith(ln, subjhdr)
             sess2 = checktbuf(trialbuf)
             write(hdrbuf, ln)
             write(hdrbuf, readline(strm; keep))
-            subj = checkhbuf(hdrbuf, [Int16, String, String, Float32, String, String])
+            subj = DataFrame(CSV.File(
+                take!(hdrbuf);
+                types=[Int16, String, String, Float32, String, String],
+                )
+            )
             ln = skipblanks(strm)
             startswith(ln, ncorhdr) || throw(ArgumentError("Expected $ncorhdr, got $ln"))
             write(hdrbuf, ln)
             write(hdrbuf, readline(strm; keep))
-            ncor = checkhbuf(hdrbuf, [Int16, Int16, Float32, Int16, Float32])
+            ncor = DataFrame(CSV.File(
+                take!(hdrbuf);
+                types=[Int8, Int8, Float32, Int8, Float32],
+                missingstring="999",
+                ),
+            )
             ln = skipblanks(strm)
             startswith(ln, hlthhdr) || throw(ArgumentError("Expected $hlthhdr, got $ln"))
             write(hdrbuf, ln)
             write(hdrbuf, readline(strm; keep))
-            hlth = checkhbuf(hdrbuf, [Int8, Int8, Int8, Int8, String])
+            hlth = DataFrame(CSV.File(
+                take!(hdrbuf);
+                types=[Int8, Int8, Int8, Int8, String],
+                ),
+            )
             break
         else
             write(trialbuf, ln)
@@ -104,3 +113,12 @@ end
 
 dfs =
 [parse_ldt_file(nm) for nm in filter(∉(SKIPLIST), filter(endswith(r"LDT"i), readdir(DATADIR)))];
+
+function checksubj(nt)
+    subjno = only(unique(nt.univ.Subject))
+    return only(nt.subj.Subject) == subjno ? subjno : nothing
+end
+
+getDOB(nt) = join(unique(nt.univ.DOB), '|')
+
+getEduc(nt) = maximum(nt.univ.Education)
