@@ -1,2 +1,2 @@
 # EnglishLexicon.jl
-Julia code for proecessing data files in the English Lexicon Project
+Julia code for processing data files in the English Lexicon Project
