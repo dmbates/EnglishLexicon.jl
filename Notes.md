@@ -1,3 +1,5 @@
+## LDT Files
+
 - 9999.LDT is a copy of 101DATA.LDT
     + recommend removing 9999.LDT
 - 793DATA.LDT is almost a copy of Data3544.LDT (dob for second session is in a different format)
@@ -18,7 +20,7 @@
 - Duplicate demographic blocks at the end of 404DATA.LDT, Data3034.LDT, 436DATA.LDT, 520DATA.LDT, Data1016.LDT, Data1634.LDT, Data1988.LDT
     + recommend using the last one, because we assume errors were corrected
 - 426DATA.LDT, Data1004.LDT, Data1009.LDT, Data1018.LDT, Data2042.LDT, Data2446.LDT are missing all the information in the demographic block. Add missingstring entry to CSV.File call.
-- 620DATA.LDT is missing most of the information in the demographic block.   Change the date of the MEQ test to 01-01-0000 so that it can be parsed as a Date.
+- 620DATA.LDT is missing most of the information in the demographic block.
 - Data1988.LDT is corrupt at sequence number 1744.  Sequence number 1745 can be salvaged by inserting a newline but probably not 1744 (response time is incomplete).
 - Data1988.LDT is missing the header for the second session.
 - Data3572.LDT is corrupt at sequence number 1749.  Sequence number 1750 can be salvaged by insterting a newline but not 1749
@@ -56,3 +58,38 @@
 - Records from Data999.LDT, Data1000.LDT, Data1010.LDT and Data1016.LDT are not in the CSV file
 _ CSV file is missing both sequence number 1744 and 1745 from Sub_ID == 756 (file Data1988.LDT)
 _ CSV file is missing both sequence number 1749 and 1750 from Sub_ID == 772 (file Data3572.LDT)
+- After accounding for differences in formatting the DOB and doing some editing, there were six files (405DATA.LDT, 510DATA.LDT, Data1066.LDT, Data2087.LDT, Data2328.LDT, and Data3034.LDT) with inconsistently recorded DOB entries.  Used the DOB from the second session.
+
+
+## NMG Files
+- Data3929.NMG is missing a header for the second session; instead it has a duplicate record for seq number 1500.  Created a ficticious header with the same time, next day.
+- Data3929.NMG is corrupt at sequence number 1241.  Number 1242 can be salvaged but not 1241.
+- Data3929.NMG is corrupt around line 2002 - a few lines were repeated
+- 220data.nmg, 259DATA.nmg, Data7146.NMG have spurious headers for the second session
+    + recommend removing 4 lines: a blank line, a line of = signs, and the spurious header
+- 42DATA.NMG, 308DATA.NMG, 74DATA.NMG, 75DATA.NMG, and Data4110.NMG have inconsistent DOB (called "Age" in the NMG files).  Use the second one. (74DATA.NMG and 75DATA.NMG seem to have exchanged DOB.)
+- File 322DATA.NMG is a copy of Data2815.NMG, 323DATA.NMG is a copy of Data2816.NMG, ..., 328DATA.NMG is a copy of Data2821.NMG
+- Files 12DATA.NMG and Data4140.NMG both have subj=12 but different universities (1 and 5)
+- Files Data4100.NMG and Data7146.NMG have subj=51 but different universities (1 and 5)
+- Files 61DATA.NMG and Data4110.NMG have subj=61 but different universities (1 and 5)
+- Files 283DATA.NMG and Data7147.NMG have subj=283 and univ=5 but different demographics
+- Files 349DATA.NMG and Data3872.NMG have subj=349 but different univ (5 and 6)
+- Files 360DATA.NMG and Data3882.NMG have subj=360 but different univ (5 and 6)
+- Files 362DATA.NMG and Data3884.NMG have subj=362 but different univ (5 and 6)
+- Files 363DATA.NMG and Data3886.NMG have subj=363 but different univ (5 and 6)
+- Files 366DATA.NMG and Data3894.NMG differ only in format of DOB.  Add Data3894.NMG to skip list.
+- Files 371DATA.NMG and Data3892.NMG have subj=371 and univ=6 but different demographics
+- Files 381DATA.NMG and Data3911.NMG have subj=381 but different univ (5 and 6)
+- Files 383DATA.NMG and Data3912.NMG have subj=383 but different univ (5 and 6)
+- Files 385DATA.NMG and Data3930.NMG have subj=385 but different univ (5 and 6)
+- Files 388DATA.NMG and Data4210.NMG have subj=388 but different univ (5 and 6)
+- Files 399DATA.NMG and Data4118.NMG have subj=399 but different univ (5 and 6)
+- Files 400DATA.NMG and Data4119.NMG have subj=400 but different univ (5 and 6)
+- Files 449DATA.NMG and Data5255.NMG have subj=449 but different univ (5 and 6)
+
+
+## Items.csv file
+- Item.csv contains missing value codes as "#" and embedded commas in quoted number fields
+- CSV.File(fnm; missingstring="#") returns those number fields containing commas as strings
+    + use `replace` followed by parsing as `Int` then conversion to smaller Int sizes according to the extrema
+- After a `leftjoin` it helps to use `disallowmissing!(frm; error=false)` b/c columns from the second argument (i.e. the table on the right) must allow for missing values in the result.
