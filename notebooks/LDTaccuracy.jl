@@ -25,18 +25,33 @@ Begin by loading the packages to be used and accessing the trial-level data from
 # ╔═╡ c13579f0-8357-4311-9096-21aa21b0c3fe
 begin
 	trials = DataFrame(Arrow.Table("../arrow/ldt_trial.arrow"))
-	trials.item = CategoricalArray(
+	trials.item = CategoricalArray(  # ensure that item is an ordered factor
 		trials.item;
 		levels=DataAPI.refpool(trials.item),
 		ordered=true,
 	)
+	trials.S2 = trials.seq .> 2000   # was the trial in the second session?
 	describe(trials)
 end
+
+# ╔═╡ 3227de48-d998-449e-839e-7b095c5fb894
+md"""
+The extreme values of response time are for subject 753 in trials in the sequence numbers 3161 to 3169.
+"""
+
+# ╔═╡ 87e5a660-a29a-48ed-8159-39063cddbb86
+@subset(trials, :rt < 0)
+
+# ╔═╡ fd760f35-e988-43f9-bb80-e2ea9ec7257a
+@subset(trials, :rt > 5000)
+
+# ╔═╡ aa646c96-95e5-4fe3-87e4-c20d433412f5
+@subset(trials, :subj == 753 && (3160 ≤ :seq ≤ 3170))
 
 # ╔═╡ ca1525f7-55f9-48e9-bffb-32709667b681
 md"""
 Notice that there are 1370 (out of over 2.7 million) accuracy values that are coded as missing.
-These need to be considered when creating proportion accurate for the items and for the subjects.
+These must be omitted when creating proportion accurate for the items and for the subjects.
 
 Also, it is an advantage to preserve the order of the levels of `item` because word/nonword pairs are adjacent in this ordering.
 
@@ -64,19 +79,30 @@ nused(x) = sum(!ismissing, x)
 nacc(x) = sum(skipmissing(x))
 
 # ╔═╡ 3d89e7dd-080e-4394-a6f0-d5e7bdcbfd91
-itemacc = leftjoin(
-	transform(
-		combine(
-			groupby(trials, :item),
-			nrow => :n,
-			:acc => nused => :nused,
-			:acc => nacc => :nacc,
+itemacc = disallowmissing!(
+	leftjoin(
+		transform(
+			combine(
+				groupby(trials, :item),
+				nrow => :n,
+				:acc => nused => :nused,
+				:acc => nacc => :nacc,
+			),
+			[:nacc, :nused] => ((n, d) -> n ./ d) => :prop,
 		),
-		[:nacc, :nused] => ((n, d) -> n ./ d) => :prop,
-	),
-	select(items, :item, :isword);
-	on=:item,
+		select(items, :item, :isword, :wrdlen);
+		on=:item,
+	);
+	error=false,
 )
+
+# ╔═╡ 3ea464b1-fd8b-406a-bc60-8739ecb0879d
+md"""
+Interestingly, single-letter words seem to be difficult to identify
+"""
+
+# ╔═╡ 90c992a0-273d-48be-b41b-a9f94843d0eb
+@subset(itemacc, isone(:wrdlen))
 
 # ╔═╡ ff4865ce-d623-4746-940f-070c85f233ed
 describe(itemacc)
@@ -107,6 +133,38 @@ perfectprop = @subset(itemacc, isone(:prop))
 # ╔═╡ 6bd58408-2276-4d0b-be3b-419e07d2a3e4
 describe(perfectprop)
 
+# ╔═╡ 1df15132-b028-462d-8723-fc659457d409
+md"""
+## Create accuracy by word/nonword length
+"""
+
+# ╔═╡ 26736c26-b1f6-4d31-8040-4437970c86b7
+wrdlenacc = transform(
+	transform(
+		combine(
+			groupby(itemacc, :wrdlen),
+			:nused => sum,
+			:nacc => sum;
+			renamecols=false,
+		),
+		[:nacc, :nused] => ((x, y) -> x ./ y) => :prop,
+	),
+	[:prop, :nused] => ((p, n) -> sqrt.((p .* (1 .- p)) ./ n)) => :stderr,
+)
+
+# ╔═╡ e79b3a5e-9ccb-48ac-94a0-a47e85cd57e7
+begin
+	f = Figure()
+	Axis(
+		f[1, 1],
+		xlabel="Proportion accurate (with 95% confidence interval)",
+		ylabel = "word length",
+	)
+	scatter!(wrdlenacc.prop, wrdlenacc.wrdlen; color=(:red, 0.2))
+	errorbars!(wrdlenacc.prop, wrdlenacc.wrdlen, 2 .* wrdlenacc.stderr; direction=:x)
+	f
+end
+
 # ╔═╡ 77332aec-73e6-4565-914f-393723c98864
 md"""
 ## Create accuracy by subject table
@@ -114,26 +172,45 @@ md"""
 
 # ╔═╡ 13f7feb8-59cd-4e68-b97b-4c667a719cd0
 begin
-	subjs = DataFrame(Arrow.Table("../arrow/ldt_subj.arrow"))
+	subjs = disallowmissing!(
+		DataFrame(Arrow.Table("../arrow/ldt_subj.arrow"));
+		error=false,
+	)
 	describe(subjs)
 end
 
 # ╔═╡ d4d541c7-3776-4ff3-bd19-36eaed7deaf3
 begin
-	subjacc = leftjoin(
-		transform(
-			combine(
-				groupby(trials, :subj),
-				nrow => :n,
-				:acc => nused => :nused,
-				:acc => nacc => :nacc,
+	subjacc = disallowmissing!(
+		leftjoin(
+			transform(
+				combine(
+					groupby(trials, :subj),
+					nrow => :n,
+					:acc => nused => :nused,
+					:acc => nacc => :nacc,
+				),
+				[:nacc, :nused] => ((n, d) -> n ./ d) => :prop,
 			),
-			[:nacc, :nused] => ((n, d) -> n ./ d) => :prop,
-		),
-		subjs;
-		on=:subj,
+			subjs;
+			on=:subj,
+		);
+		error=false,
 	)
-	subjacc.univ = CategoricalArray(subjacc.univ)  # add levels 
+	subjacc.univ = let
+	levs = [
+		"Morehead",
+		"SUNY-Albany",
+		"Kansas",
+		"South Florida",
+		"Washington",
+		"Wayne State",
+	]
+		CategoricalArray(
+			levs[subjacc.univ];
+			levels = levs,
+		)
+	end
 	describe(subjacc)
 end
 
@@ -146,6 +223,24 @@ AlgebraOfGraphics.density() |> draw
 data(subjacc) *
 mapping(:prop => "Proportion of accurate trials", color=:univ) *
 AlgebraOfGraphics.density() |> draw
+
+# ╔═╡ 194ec1ca-c371-47e4-abfd-e3f8c4306d4b
+md"""
+## Create Accuracy by session table
+
+There does not seem to be a significant difference in accuracy according to first or second session.
+"""
+
+# ╔═╡ bee7e906-435d-4d93-9395-c19a64673130
+session = transform!(
+	combine(
+		groupby(trials, :S2), 
+		nrow => :n,
+		:acc => nused => :nused,
+		:acc => nacc => :nacc,
+	),
+	[:nacc, :nused] => ((n, d) -> n ./ d) => :prop,
+)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -172,7 +267,7 @@ DataFrames = "~1.2.2"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.0-rc2"
+julia_version = "1.7.0-rc3"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -413,9 +508,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
-git-tree-sha1 = "2ea02796c118368c3eda414fc11f5a39259fa3d9"
+git-tree-sha1 = "cce8159f0fee1281335a04bbf876572e46c921ba"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.27"
+version = "0.25.29"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
@@ -576,9 +671,9 @@ version = "1.3.14+0"
 
 [[deps.GridLayoutBase]]
 deps = ["GeometryBasics", "InteractiveUtils", "Observables"]
-git-tree-sha1 = "da685397e6a6d306227aa5841b67635ea41cad3f"
+git-tree-sha1 = "70938436e2720e6cb8a7f2ca9f1bbdbf40d7f5d0"
 uuid = "3955a311-db13-416c-9275-1d80ed98e5e9"
-version = "0.6.3"
+version = "0.6.4"
 
 [[deps.Grisu]]
 git-tree-sha1 = "53bb909d1151e57e2484c3d1b53e19552b887fb2"
@@ -784,9 +879,9 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[deps.Loess]]
 deps = ["Distances", "LinearAlgebra", "Statistics"]
-git-tree-sha1 = "b5254a86cf65944c68ed938e575f5c81d5dfe4cb"
+git-tree-sha1 = "46efcea75c890e5d820e670516dc156689851722"
 uuid = "4345ca2d-374a-55d4-8d30-97f9976e7612"
-version = "0.5.3"
+version = "0.5.4"
 
 [[deps.LogExpFunctions]]
 deps = ["ChainRulesCore", "ChangesOfVariables", "DocStringExtensions", "InverseFunctions", "IrrationalConstants", "LinearAlgebra"]
@@ -951,9 +1046,9 @@ version = "8.44.0+0"
 
 [[deps.PDMats]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
-git-tree-sha1 = "c8b8775b2f242c80ea85c83714c64ecfa3c53355"
+git-tree-sha1 = "86a37fba91f9fb5bbc5207e9458a5b831dfebb6b"
 uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
-version = "0.11.3"
+version = "0.11.4"
 
 [[deps.PNGFiles]]
 deps = ["Base64", "CEnum", "ImageCore", "IndirectArrays", "OffsetArrays", "libpng_jll"]
@@ -1197,10 +1292,10 @@ uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.12"
 
 [[deps.StatsFuns]]
-deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "95072ef1a22b057b1e80f73c2a89ad238ae4cfff"
+deps = ["ChainRulesCore", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "385ab64e64e79f0cd7cfcf897169b91ebbb2d6c8"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "0.9.12"
+version = "0.9.13"
 
 [[deps.StatsModels]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsBase", "StatsFuns", "Tables"]
@@ -1414,12 +1509,18 @@ version = "3.5.0+0"
 # ╟─c85579bc-425d-11ec-2e12-c9f177cc9e7f
 # ╠═5d46e304-e5c5-453a-8e67-d26efb243f0d
 # ╠═c13579f0-8357-4311-9096-21aa21b0c3fe
+# ╟─3227de48-d998-449e-839e-7b095c5fb894
+# ╠═87e5a660-a29a-48ed-8159-39063cddbb86
+# ╠═fd760f35-e988-43f9-bb80-e2ea9ec7257a
+# ╠═aa646c96-95e5-4fe3-87e4-c20d433412f5
 # ╟─ca1525f7-55f9-48e9-bffb-32709667b681
 # ╠═1f2e233f-8292-4769-be89-7bb0d06d4f66
 # ╟─b2766c8d-aa16-48f6-8fea-78ca3f070cd2
 # ╠═cddc5bf3-b915-4822-a1f2-507854ad2198
 # ╠═00d5e55a-0a91-4573-b59b-37c772896c39
 # ╠═3d89e7dd-080e-4394-a6f0-d5e7bdcbfd91
+# ╟─3ea464b1-fd8b-406a-bc60-8739ecb0879d
+# ╠═90c992a0-273d-48be-b41b-a9f94843d0eb
 # ╠═ff4865ce-d623-4746-940f-070c85f233ed
 # ╠═ae858f5c-51a7-492f-bf39-a11e98ee8b1c
 # ╟─88503bdf-d363-4308-8de5-c412a76f0a19
@@ -1427,10 +1528,15 @@ version = "3.5.0+0"
 # ╟─11b6d5a1-df14-445d-8ac9-869249d2edf7
 # ╠═d429716c-9e86-4525-a3d6-06196bb0e7cc
 # ╠═6bd58408-2276-4d0b-be3b-419e07d2a3e4
+# ╟─1df15132-b028-462d-8723-fc659457d409
+# ╠═26736c26-b1f6-4d31-8040-4437970c86b7
+# ╠═e79b3a5e-9ccb-48ac-94a0-a47e85cd57e7
 # ╟─77332aec-73e6-4565-914f-393723c98864
 # ╠═13f7feb8-59cd-4e68-b97b-4c667a719cd0
 # ╠═d4d541c7-3776-4ff3-bd19-36eaed7deaf3
 # ╠═ad8ef4b1-34fb-4156-8e1f-c9287fc915f7
 # ╠═0fd1ba10-362d-4469-99c6-b1488d9b6e47
+# ╟─194ec1ca-c371-47e4-abfd-e3f8c4306d4b
+# ╠═bee7e906-435d-4d93-9395-c19a64673130
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
