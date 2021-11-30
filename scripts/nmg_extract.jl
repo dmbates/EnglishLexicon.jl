@@ -149,6 +149,10 @@ subjtbl = sort!(
 
 subjtbl.sex = PooledArray(subjtbl.sex; compress=true, signed=true);
 subjtbl.frstLang = PooledArray(subjtbl.frstLang; compress=true, signed=true);
+subjtbl.univ = let
+    levs = ["Morehead","SUNY-Albany","Kansas","South Florida","Wash. Univ","Wayne State"]
+    CategoricalArray(levs[subjtbl.univ]; levels=levs)
+end;
 subjtbl.rawscor = [(ismissing(x) || x < 3) ? missing : x for x in subjtbl.rawscor];
 subjtbl.ncorrct = [(ismissing(x) || x < 3) ? missing : x for x in subjtbl.ncorrct];
 subjtbl.vocabAge = [(ismissing(x) || x < 3 || x > 25) ? missing : x for x in subjtbl.vocabAge];
@@ -185,12 +189,10 @@ Arrow.write("./arrow/nmg_trial.arrow", select(trials, Not(:itemno)); compress=:z
 
 # Incorporate information from Items.csv
 
-items = DataFrame(CSV.File("Items.csv.gz"; missingstring="#"))
-
 asInt(v) = passmissing(parse).(Int, passmissing(replace).(v, ',' => ""))
 asFloat(v) = passmissing(parse).(Float32, passmissing(replace).(v, ',' => ""))
 items = select!(
-    DataFrame(CSV.File("Items.csv"; missingstring="#")),
+    DataFrame(CSV.File("./Items.csv.gz"; missingstring="#")),
     :,
     :Freq_KF => asInt,
     :Freq_HAL => asInt,

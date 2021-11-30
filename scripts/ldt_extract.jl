@@ -1,4 +1,10 @@
-using Arrow, CategoricalArrays, CSV, DataFrames, Dates, PooledArrays, ZipFile
+using Arrow
+using CategoricalArrays
+using CSV
+using DataFrames
+using Dates
+using PooledArrays
+using ZipFile
 
 include("utils.jl")
 
@@ -132,7 +138,12 @@ subjtbl.ncorrct = [(ismissing(x) || x < 3) ? missing : x for x in subjtbl.ncorrc
 subjtbl.vocabAge = [(ismissing(x) || x < 3 || x > 25) ? missing : x for x in subjtbl.vocabAge];
 subjtbl.readTime = [(ismissing(x) || x < 0) ? missing : x for x in subjtbl.readTime];
 subjtbl.MEQ = [(ismissing(x) || x < 3) ? missing : x for x in subjtbl.MEQ];
-Arrow.write("./arrow/ldt_subj.arrow", subjtbl; compress=:zstd)
+subjtbl.univ = let
+    levs = ["Morehead","SUNY-Albany","Kansas","South Florida","Wash. Univ","Wayne State"]
+    CategoricalArray(levs[subjtbl.univ]; levels=levs)
+end
+
+Arrow.write("./arrow/ldt_subj.arrow", disallowmissing!(subjtbl; error=false); compress=:zstd)
 
 """
     trtbl(nt)

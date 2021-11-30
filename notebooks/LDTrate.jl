@@ -4,7 +4,7 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 5d46e304-e5c5-453a-8e67-d26efb243f0d
+# ╔═╡ ee6c5d05-47b5-41d5-ab7e-897385ea18e0
 begin
 	using AlgebraOfGraphics
 	using Arrow
@@ -16,22 +16,17 @@ begin
 	using DataFrames
 	using MixedModels
 	using MixedModelsMakie
-	using MKL
-	using PlutoUI  # for table of contents
 	using StandardizedPredictors
 end
 
-# ╔═╡ c85579bc-425d-11ec-2e12-c9f177cc9e7f
+# ╔═╡ 904438be-5203-11ec-290d-77cf960ffd6e
 md"""
-# English Lexicon Project LDT Accuracy
+# English Lexicon LDT rate
 
-Begin by loading the packages to be used and accessing the trial-level data from `../arrow/ldt_trial.arrow`
+Load the necessary packages and import the trial-level data.
 """
 
-# ╔═╡ 0da153eb-6187-4bfb-8e76-b90f182dc19d
-PlutoUI.TableOfContents()
-
-# ╔═╡ c13579f0-8357-4311-9096-21aa21b0c3fe
+# ╔═╡ 1b89da65-7057-40a2-9310-258dc5b93c52
 begin
 	trials = DataFrame(Arrow.Table("../arrow/ldt_trial.arrow"))
 	trials.item = CategoricalArray(  # ensure that item is an ordered factor
@@ -43,193 +38,86 @@ begin
 	describe(trials)
 end
 
-# ╔═╡ ca1525f7-55f9-48e9-bffb-32709667b681
+# ╔═╡ 6faca1dc-03d3-4e8b-8841-d8465d53117c
 md"""
-Notice that there are 1370 (out of over 2.7 million) accuracy values that we other than 0 or 1 in the raw data files and hence are coded as missing in `trials.arrow`.
-These must be skipped when creating proportion accurate for the items and for the subjects.
+The accuracy at each trial in this lexical decision task was analyzed in another notebook.
+In this notebook we analyze the response time, `rt`, measured in milliseconds.
 
-Also, we have taken pains to preserve the order of the levels of `item` because word/nonword pairs are adjacent in this ordering.
-In the table shown below, `isword` and `pairno` are derived from `itemno` because of this item numbering.
+First we see that there are some extreme values, -16 seconds and 32 seconds.
+The negative value is probably a wrap-around from conversion of an unsigned 16-bit integer to a signed integer.
 
-Now load a dataframe of information on items
+These extreme values of response time are inaccurate trials for subject 753 in the sequence numbers 3161 to 3169.
 """
 
-# ╔═╡ 1f2e233f-8292-4769-be89-7bb0d06d4f66
+# ╔═╡ e498e0ec-b509-4f64-b1af-ffe48a47603e
+@subset(trials, :rt < 0)
+
+# ╔═╡ 225765cd-9fa5-4c73-8850-1eaa2496dce6
+@subset(trials, :rt > 5000)
+
+# ╔═╡ 7e45c469-cf61-4a90-a7c0-f378feebd121
+md"""
+The extreme response times are for inaccurate identifications.  
+Typically, response times are analyzed only for the accurate responses that are within a particular range, such as 250 < `rt` < 4000.
+"""
+
+# ╔═╡ ae275f17-9985-4946-b6c8-5c795b424880
 begin
-	items = DataFrame(Arrow.Table("../arrow/ldt_item.arrow"))
-	describe(items)
+	accurate_trials = select(@subset(trials, !ismissing(:acc) && :acc), Not(:acc));
+	describe(accurate_trials)
 end
 
-# ╔═╡ bc3c18f4-5445-4115-b458-8f6ba079c490
-all(items.isword .== isodd.(items.itemno))
-
-# ╔═╡ ccda3e89-b845-4d04-a39d-538d38667fc7
-all(items.pairno .== (items.itemno .+ items.isword) .÷ 2)
-
-# ╔═╡ b2766c8d-aa16-48f6-8fea-78ca3f070cd2
+# ╔═╡ 6c949605-4f79-46ec-8775-112a4fc01b1d
 md"""
-## Create item accuracy table
-
-First define two utility functions to count the number of non-missing values and the number of `true`s in the `acc` column.
-These functions are used to create a table by item through the split-apply-combine strategy.
+The number of accurate response times outside the suggested truncation limits is small and we proceed with the truncation.
 """
 
-# ╔═╡ cddc5bf3-b915-4822-a1f2-507854ad2198
-nused(x) = sum(!ismissing, x)
+# ╔═╡ 9f8098fc-e643-4010-a290-3fd3cd7573de
+(nrow(accurate_trials),sum(accurate_trials.rt .< 250),sum(accurate_trials.rt .> 4000))
 
-# ╔═╡ 00d5e55a-0a91-4573-b59b-37c772896c39
-nacc(x) = sum(skipmissing(x))
+# ╔═╡ 16ba0adf-e330-4851-ae68-c2c6c1d01136
+@subset!(accurate_trials, 250 ≤ :rt ≤ 4000)
 
-# ╔═╡ 3d89e7dd-080e-4394-a6f0-d5e7bdcbfd91
-itemacc = @chain trials begin
-	groupby(:item)
-	combine(nrow => :n, :acc => nused => :nused, :acc => nacc => :nacc)
-	transform([:nacc, :nused] => ((n, d) -> n ./ d) => :prop)  #proportion accurate
-	leftjoin(select(items, :item, :isword, :wrdlen); on=:item)
-	disallowmissing!(error=false)  # leftjoins allow for missing values in added cols
-end
+# ╔═╡ 6b670af8-b54b-4822-a8ef-4314b29a66e6
+md"""
+## Choice of metric for response
 
-# ╔═╡ 24d8f2a9-dff5-4167-bd73-af6df3978ac2
-describe(itemacc)
+As often happens in such experiments, the distribution of the response times is skewed to the right.
+"""
 
-# ╔═╡ ae858f5c-51a7-492f-bf39-a11e98ee8b1c
-data(itemacc) *
-mapping(:prop => "Proportion of accurate trials", color=:isword) *
+# ╔═╡ 35939806-a8a6-4a1f-8843-e457b0aecfba
+data(accurate_trials) *
+mapping(:rt => "Response time (ms) for truncated, accurate trials") *
 AlgebraOfGraphics.density() |> draw
 
-# ╔═╡ 88503bdf-d363-4308-8de5-c412a76f0a19
+# ╔═╡ aacb60c3-138f-459b-b9c1-d379aa7fde18
 md"""
-It is interesting that there are more words than nonwords in the low accuracy (say, less than 50% correct) region and at very high accuracy (close to 100% correct) region.
+Transforming to the speed in responses per second produces a more symmetric distribution.
 """
 
-# ╔═╡ d4e89243-5da9-44d0-9b99-f68174a11956
-first(sort(itemacc, :prop), 20)
-
-# ╔═╡ 11b6d5a1-df14-445d-8ac9-869249d2edf7
-md"""
-This shows that there were 9 words that were never identified as words.
-
-By contrast, 10571 items were identified perfectly and over 60% of those are words.
-"""
-
-# ╔═╡ d429716c-9e86-4525-a3d6-06196bb0e7cc
-perfectprop = @subset(itemacc, isone(:prop))
-
-# ╔═╡ 6bd58408-2276-4d0b-be3b-419e07d2a3e4
-describe(perfectprop)
-
-# ╔═╡ bddf7ae3-e2a0-456f-a873-3f6eb073700c
-md"""
-Over all of the items there is a slight tendency for lower accuracy on longer words but not a strong trend.
-"""
-
-# ╔═╡ 53174662-c2cf-4632-90ca-abfb313a3f13
-let
-	dat = transform(itemacc, :wrdlen => (x -> Float64.(x)) => :F64len)
-	xy = data(dat) * mapping(:F64len => "Word length", :prop => "Accuracy")
-	layers = smooth() + visual(Scatter, color=(:blue, 0.2))
-	draw(layers * xy)
-end
-
-# ╔═╡ 18321620-7d8e-4878-bdca-49bbcc950e00
-md"""
-The tendency for less accuracy on longer words is confounded with word/nonword status.
-For words, the proportion accurate seems unaffected by word length but for nonwords accuracy decreases with length.
-"""
-
-# ╔═╡ 739b0fc7-859e-43c3-a0b5-724e85a5bb17
-let
-	dat = transform(itemacc, :wrdlen => (x -> Float64.(x)) => :F64len)
-	xy = data(dat) *
-	mapping(:F64len => "Word length", :prop => "Accuracy", row=:isword)
-	layers = smooth() + visual(Scatter, color=(:blue, 0.2))
-	draw(layers * xy)
-end
-
-# ╔═╡ 77332aec-73e6-4565-914f-393723c98864
-md"""
-## Create accuracy by subject table
-"""
-
-# ╔═╡ 13f7feb8-59cd-4e68-b97b-4c667a719cd0
+# ╔═╡ 865fff39-8dc8-4120-bb16-6c42fe177931
 begin
-	subjs = DataFrame(Arrow.Table("../arrow/ldt_subj.arrow"))
-	describe(subjs)
+	transform!(accurate_trials, :rt => (x -> 1000 ./ x) => :rate)
+	data(accurate_trials) * 
+	mapping(:rate => "Response rate (s⁻¹) on accurate trials") *
+	AlgebraOfGraphics.density() |> draw
 end
 
-# ╔═╡ d4d541c7-3776-4ff3-bd19-36eaed7deaf3
-begin
-	subjacc = @chain trials begin
-		groupby(:subj)
-		combine(nrow => :n, :acc => nused => :nused, :acc => nacc => :nacc)
-		transform([:nacc, :nused] => ((n, d) -> n ./ d) => :prop)
-		leftjoin(subjs, on=:subj)
-		disallowmissing!(error=false)
-	end
-	describe(subjacc)
-end
-
-# ╔═╡ ad8ef4b1-34fb-4156-8e1f-c9287fc915f7
-data(@subset(subjacc, !ismissing(:sex))) *
-mapping(:prop => "Proportion of accurate trials", color=:sex) *
-AlgebraOfGraphics.density() |> draw
-
-# ╔═╡ 0fd1ba10-362d-4469-99c6-b1488d9b6e47
-data(subjacc) *
-mapping(:prop => "Proportion of accurate trials", color=:univ => "University") *
-AlgebraOfGraphics.density() |> draw
-
-# ╔═╡ 0254c1e3-7c8f-4896-a359-3ce921f5ca24
+# ╔═╡ d1f004b8-784d-441f-8673-bc29d2284097
 md"""
-There is more-or-less a linear relationship between vocabulary age and the proportion of accurate trials by subject, except for an outlier at a vocabulary age of 10.3, which may be a transcription error on the number of correct responses in the Shipley test.
+## Information on subject and item
+
+Create an extended data table from the accurate trials and the information on subject and on item.
 """
 
-# ╔═╡ 52241d2a-6c95-40c3-be70-334506d31c23
-let
-	dat = transform(
-		@subset(subjacc, !ismissing(:vocabAge)),
-		:vocabAge => (x -> Float64.(x)) => :F64age,
-	)
-	xy = data(dat) * mapping(:F64age => "Vocabulary age", :prop => "Accuracy")
-	layers = smooth() + visual(Scatter, color=(:blue, 0.3))
-	draw(layers * xy)
+# ╔═╡ de04e6f8-e259-463e-8a21-e29bcfad5541
+dat = @chain accurate_trials begin
+	leftjoin(DataFrame(Arrow.Table("../arrow/ldt_item.arrow")); on=:item)
+	leftjoin(DataFrame(Arrow.Table("../arrow/ldt_subj.arrow")); on=:subj)
+	disallowmissing(error=false)
 end
 
-# ╔═╡ 92d67da3-ac9a-4751-8508-910f7d86ae40
-@subset(subjacc, !ismissing(:vocabAge) && :vocabAge < 11)
-
-# ╔═╡ 194ec1ca-c371-47e4-abfd-e3f8c4306d4b
-md"""
-## Create Accuracy by session table
-
-There does not seem to be a significant difference in accuracy according to first or second session.
-"""
-
-# ╔═╡ bee7e906-435d-4d93-9395-c19a64673130
-session = @chain trials begin
-	groupby(:S2)
-	combine(nrow => :n, :acc => nused => :nused, :acc => nacc => :nacc)
-	transform!([:nacc, :nused] => ((n, d) -> n ./ d) => :prop)
-end
-
-# ╔═╡ 86e0c4d3-d493-4926-9285-135afbf1d15d
-md"""
-## Initial mixed-effects modeling
-
-At the trial level accuracy is a binary response, for which we would use generalized linear models (GLMs) or generalized linear mixed models (GLMMs).
-However, a GLMM will take a long time to fit and some of the screening of variables can be done using a linear mixed model (LMM) which can be fit much more quickly.
-
-
-"""
-
-# ╔═╡ c11f361b-f25b-42e5-866c-08f2dc60cd20
-dat = @chain trials begin
-	leftjoin(items, on=:item)
-	leftjoin(subjs, on=:subj)
-	disallowmissing!(error=false)
-end
-
-# ╔═╡ 94e79ad7-83eb-410e-a6da-f5af1484e953
+# ╔═╡ bb6d5d55-5841-41fb-ac7b-b06fef6bf18e
 contrasts = Dict(
 	:item => Grouping(),
 	:subj => Grouping(),
@@ -240,59 +128,20 @@ contrasts = Dict(
 	:sex => HelmertCoding(),  # f => -1, m => +1
 )
 
-# ╔═╡ dd2820f9-0909-472f-a5a4-52e56eaa36df
-m1 = let form =
-	@formula(acc ~ 1 + isword * wrdlen + vocabAge + sex + (1|item) + (1|subj))
+# ╔═╡ c6c03138-f5e5-4f9f-a209-0da5ea60f4af
+m1 = let
+	form = @formula(rate ~ 1 + sex + vocabAge + isword * wrdlen + (1|item) + (1|subj))
 	fit(MixedModel, form, dat; contrasts)
 end
 
-# ╔═╡ 545a0b09-2154-4c4f-8c14-141efc53850c
-md"""
-As indicated in the plot, `wrdlen` is not significant for the reference group (words) but the interaction with `isword: false` is significant.
-
-There is also some indication that site (i.e. `univ`) is signficant with regard to accuracy.
-"""
-
-# ╔═╡ 30324d5a-2ce6-4282-ad6e-fa30b8f21aa2
-m2 = let form =
-	@formula(acc ~ 1 + isword * wrdlen + univ + vocabAge + sex +
-		(1|item) + (1|subj))
+# ╔═╡ 279f6182-ea9a-487d-8e01-acc01bb4a98e
+m2 = let
+	form = @formula(rate ~ 1 + vocabAge + isword * wrdlen + (1|item) + (1|subj))
 	fit(MixedModel, form, dat; contrasts)
 end
 
-# ╔═╡ 9ad4d651-521b-4bba-87ef-d9ce6a5e1c5f
-MixedModels.likelihoodratiotest(m1, m2)
-
-# ╔═╡ 41081cdc-d3f8-4bdd-87e6-b56ac22c5fee
-md"""
-It is difficult to obtain convergence on a GLMM fit to such a large data set.
-Each evaluation of the deviance is expensive and can be unstable for complex models.
-
-It is best to fit a very simple model with scalar random effects first and use the parameter estimates from that as starting values in later model fits.
-
-Even with good starting estimates, this model will take about 6 minutes to fit on a recently purchased laptop.  Uncomment the call to `fit!` if you want to check performance on your computer.
-"""
-
-# ╔═╡ eff38c5a-d7cc-4103-a3fc-b46f81e0e4fc
-gm1 = let form = @formula(acc ~ 1 + (1|item) + (1|subj))
-	GeneralizedLinearMixedModel(form, dat, Bernoulli(); contrasts)
-end;
-
-# ╔═╡ 6ef96cf9-7651-476c-a650-31ddc71552ee
-begin
-	gm1.LMM.optsum.initial = [1.4, 0.7]
-	gm1.LMM.optsum.initial_step = [0.1, 0.1]
-end;
-
-# ╔═╡ f188ad63-072a-442c-8261-e3dcbabda9ae
-#fit!(gm1; fast=true, verbose=true)
-# produced estimates of 2.3377 for β, 1.3826 for σ_item and 0.6902 for σ_subj
-
-# ╔═╡ c268a6b2-e737-4fa7-87ad-dce38a35b297
-#gm1.LMM.optsum
-
-# ╔═╡ 9e979ab8-86c7-426a-9d6c-e3731eab3605
-#qqcaterpillar(gm1, :subj)
+# ╔═╡ b8062353-47c2-4cd8-9ec2-23666b59ea34
+qqcaterpillar(m2, :subj)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -305,10 +154,8 @@ Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataAPI = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-MKL = "33e6dc65-8f57-5167-99aa-e5a354878fb2"
 MixedModels = "ff71e718-51f3-5ec2-a782-8ffcbfa3c316"
 MixedModelsMakie = "b12ae82c-6730-437f-aff9-d2c38332a376"
-PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 StandardizedPredictors = "5064a6a7-f8c2-40e2-8bdc-797ec6f1ae18"
 
 [compat]
@@ -320,10 +167,8 @@ Chain = "~0.4.8"
 DataAPI = "~1.9.0"
 DataFrameMacros = "~0.1.2"
 DataFrames = "~1.2.2"
-MKL = "~0.4.2"
 MixedModels = "~4.5.0"
 MixedModelsMakie = "~0.3.11"
-PlutoUI = "~0.7.21"
 StandardizedPredictors = "~0.1.3"
 """
 
@@ -339,12 +184,6 @@ deps = ["LinearAlgebra"]
 git-tree-sha1 = "485ee0867925449198280d4af84bdb46a2a404d0"
 uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "1.0.1"
-
-[[deps.AbstractPlutoDingetjes]]
-deps = ["Pkg"]
-git-tree-sha1 = "abb72771fd8895a7ebd83d5632dc4b989b022b5b"
-uuid = "6e696c72-6542-2067-7265-42206c756150"
-version = "1.1.2"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "03e0550477d86222521d254b741d470ba17ea0b5"
@@ -779,23 +618,6 @@ git-tree-sha1 = "8a954fed8ac097d5be04921d595f741115c1b2ad"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+0"
 
-[[deps.Hyperscript]]
-deps = ["Test"]
-git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
-uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
-version = "0.0.4"
-
-[[deps.HypertextLiteral]]
-git-tree-sha1 = "2b078b5a615c6c0396c77810d92ee8c6f470d238"
-uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
-version = "0.9.3"
-
-[[deps.IOCapture]]
-deps = ["Logging", "Random"]
-git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
-uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
-version = "0.2.2"
-
 [[deps.IfElse]]
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
 uuid = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
@@ -1014,12 +836,6 @@ git-tree-sha1 = "5d494bc6e85c4c9b626ee0cab05daa4085486ab1"
 uuid = "5ced341a-0733-55b8-9ab6-a4889d929147"
 version = "1.9.3+0"
 
-[[deps.MKL]]
-deps = ["Artifacts", "Libdl", "LinearAlgebra", "MKL_jll", "PackageCompiler"]
-git-tree-sha1 = "b3f01117f6276bbaf8a45391ceda4d78fb6eeaa0"
-uuid = "33e6dc65-8f57-5167-99aa-e5a354878fb2"
-version = "0.4.2"
-
 [[deps.MKL_jll]]
 deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "Pkg"]
 git-tree-sha1 = "5455aef09b40e5020e1520f551fa3135040d4ed0"
@@ -1220,12 +1036,6 @@ git-tree-sha1 = "6d105d40e30b635cfed9d52ec29cf456e27d38f8"
 uuid = "f57f5aa1-a3ce-4bc8-8ab9-96f992907883"
 version = "0.3.12"
 
-[[deps.PackageCompiler]]
-deps = ["Artifacts", "LazyArtifacts", "Libdl", "Pkg", "RelocatableFolders", "UUIDs"]
-git-tree-sha1 = "a16924b37299cc7d6106fac255b44a8c79c7c21f"
-uuid = "9b87118b-4619-50d2-8e1e-99f35a4d4d9d"
-version = "1.7.7"
-
 [[deps.Packing]]
 deps = ["GeometryBasics"]
 git-tree-sha1 = "1155f6f937fa2b94104162f01fa400e192e4272f"
@@ -1271,12 +1081,6 @@ deps = ["ColorSchemes", "Colors", "Dates", "Printf", "Random", "Reexport", "Stat
 git-tree-sha1 = "b084324b4af5a438cd63619fd006614b3b20b87b"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.0.15"
-
-[[deps.PlutoUI]]
-deps = ["AbstractPlutoDingetjes", "Base64", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
-git-tree-sha1 = "b68904528fd538f1cb6a3fbc44d2abdc498f9e8e"
-uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-version = "0.7.21"
 
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
@@ -1698,51 +1502,26 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─c85579bc-425d-11ec-2e12-c9f177cc9e7f
-# ╠═5d46e304-e5c5-453a-8e67-d26efb243f0d
-# ╠═0da153eb-6187-4bfb-8e76-b90f182dc19d
-# ╠═c13579f0-8357-4311-9096-21aa21b0c3fe
-# ╟─ca1525f7-55f9-48e9-bffb-32709667b681
-# ╠═1f2e233f-8292-4769-be89-7bb0d06d4f66
-# ╠═bc3c18f4-5445-4115-b458-8f6ba079c490
-# ╠═ccda3e89-b845-4d04-a39d-538d38667fc7
-# ╟─b2766c8d-aa16-48f6-8fea-78ca3f070cd2
-# ╠═cddc5bf3-b915-4822-a1f2-507854ad2198
-# ╠═00d5e55a-0a91-4573-b59b-37c772896c39
-# ╠═3d89e7dd-080e-4394-a6f0-d5e7bdcbfd91
-# ╠═24d8f2a9-dff5-4167-bd73-af6df3978ac2
-# ╠═ae858f5c-51a7-492f-bf39-a11e98ee8b1c
-# ╟─88503bdf-d363-4308-8de5-c412a76f0a19
-# ╠═d4e89243-5da9-44d0-9b99-f68174a11956
-# ╟─11b6d5a1-df14-445d-8ac9-869249d2edf7
-# ╠═d429716c-9e86-4525-a3d6-06196bb0e7cc
-# ╠═6bd58408-2276-4d0b-be3b-419e07d2a3e4
-# ╟─bddf7ae3-e2a0-456f-a873-3f6eb073700c
-# ╟─53174662-c2cf-4632-90ca-abfb313a3f13
-# ╟─18321620-7d8e-4878-bdca-49bbcc950e00
-# ╟─739b0fc7-859e-43c3-a0b5-724e85a5bb17
-# ╟─77332aec-73e6-4565-914f-393723c98864
-# ╠═13f7feb8-59cd-4e68-b97b-4c667a719cd0
-# ╠═d4d541c7-3776-4ff3-bd19-36eaed7deaf3
-# ╠═ad8ef4b1-34fb-4156-8e1f-c9287fc915f7
-# ╠═0fd1ba10-362d-4469-99c6-b1488d9b6e47
-# ╟─0254c1e3-7c8f-4896-a359-3ce921f5ca24
-# ╟─52241d2a-6c95-40c3-be70-334506d31c23
-# ╠═92d67da3-ac9a-4751-8508-910f7d86ae40
-# ╟─194ec1ca-c371-47e4-abfd-e3f8c4306d4b
-# ╠═bee7e906-435d-4d93-9395-c19a64673130
-# ╟─86e0c4d3-d493-4926-9285-135afbf1d15d
-# ╠═c11f361b-f25b-42e5-866c-08f2dc60cd20
-# ╠═94e79ad7-83eb-410e-a6da-f5af1484e953
-# ╠═dd2820f9-0909-472f-a5a4-52e56eaa36df
-# ╟─545a0b09-2154-4c4f-8c14-141efc53850c
-# ╠═30324d5a-2ce6-4282-ad6e-fa30b8f21aa2
-# ╠═9ad4d651-521b-4bba-87ef-d9ce6a5e1c5f
-# ╟─41081cdc-d3f8-4bdd-87e6-b56ac22c5fee
-# ╠═eff38c5a-d7cc-4103-a3fc-b46f81e0e4fc
-# ╠═6ef96cf9-7651-476c-a650-31ddc71552ee
-# ╠═f188ad63-072a-442c-8261-e3dcbabda9ae
-# ╠═c268a6b2-e737-4fa7-87ad-dce38a35b297
-# ╠═9e979ab8-86c7-426a-9d6c-e3731eab3605
+# ╟─904438be-5203-11ec-290d-77cf960ffd6e
+# ╠═ee6c5d05-47b5-41d5-ab7e-897385ea18e0
+# ╠═1b89da65-7057-40a2-9310-258dc5b93c52
+# ╟─6faca1dc-03d3-4e8b-8841-d8465d53117c
+# ╠═e498e0ec-b509-4f64-b1af-ffe48a47603e
+# ╠═225765cd-9fa5-4c73-8850-1eaa2496dce6
+# ╟─7e45c469-cf61-4a90-a7c0-f378feebd121
+# ╠═ae275f17-9985-4946-b6c8-5c795b424880
+# ╟─6c949605-4f79-46ec-8775-112a4fc01b1d
+# ╠═9f8098fc-e643-4010-a290-3fd3cd7573de
+# ╠═16ba0adf-e330-4851-ae68-c2c6c1d01136
+# ╟─6b670af8-b54b-4822-a8ef-4314b29a66e6
+# ╠═35939806-a8a6-4a1f-8843-e457b0aecfba
+# ╟─aacb60c3-138f-459b-b9c1-d379aa7fde18
+# ╠═865fff39-8dc8-4120-bb16-6c42fe177931
+# ╟─d1f004b8-784d-441f-8673-bc29d2284097
+# ╠═de04e6f8-e259-463e-8a21-e29bcfad5541
+# ╠═bb6d5d55-5841-41fb-ac7b-b06fef6bf18e
+# ╠═c6c03138-f5e5-4f9f-a209-0da5ea60f4af
+# ╠═279f6182-ea9a-487d-8e01-acc01bb4a98e
+# ╠═b8062353-47c2-4cd8-9ec2-23666b59ea34
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
