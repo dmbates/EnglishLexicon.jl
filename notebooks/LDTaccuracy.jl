@@ -45,7 +45,7 @@ end
 
 # ╔═╡ ca1525f7-55f9-48e9-bffb-32709667b681
 md"""
-Notice that there are 1370 (out of over 2.7 million) accuracy values that we other than 0 or 1 in the raw data files and hence are coded as missing in `trials.arrow`.
+Notice that there are 1370 (out of over 2.7 million) accuracy values that were recorded as a number other than 0 or 1 in the raw data files, and hence are coded as `missing` in `trials.arrow`.
 These must be skipped when creating proportion accurate for the items and for the subjects.
 
 Also, we have taken pains to preserve the order of the levels of `item` because word/nonword pairs are adjacent in this ordering.
@@ -216,10 +216,8 @@ end
 md"""
 ## Initial mixed-effects modeling
 
-At the trial level accuracy is a binary response, for which we would use generalized linear models (GLMs) or generalized linear mixed models (GLMMs).
+At the trial level, accuracy is a binary response, for which we would use generalized linear models (GLMs) or generalized linear mixed models (GLMMs).
 However, a GLMM will take a long time to fit and some of the screening of variables can be done using a linear mixed model (LMM) which can be fit much more quickly.
-
-
 """
 
 # ╔═╡ c11f361b-f25b-42e5-866c-08f2dc60cd20

@@ -114,7 +114,7 @@ Create an extended data table from the accurate trials and the information on su
 dat = @chain accurate_trials begin
 	leftjoin(DataFrame(Arrow.Table("../arrow/ldt_item.arrow")); on=:item)
 	leftjoin(DataFrame(Arrow.Table("../arrow/ldt_subj.arrow")); on=:subj)
-	disallowmissing(error=false)
+	disallowmissing(error=false) # new columns from left joins must allow for missing
 end
 
 # ╔═╡ bb6d5d55-5841-41fb-ac7b-b06fef6bf18e
