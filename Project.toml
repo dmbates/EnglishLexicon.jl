@@ -1,0 +1,13 @@
+[deps]
+AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
+Arrow = "69666777-d1a9-59fb-9406-91d4454c9d45"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+DataFrameMacros = "75880514-38bc-4a95-a458-c2aea5a3a702"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MKL = "33e6dc65-8f57-5167-99aa-e5a354878fb2"
+MixedModels = "ff71e718-51f3-5ec2-a782-8ffcbfa3c316"
+MixedModelsMakie = "b12ae82c-6730-437f-aff9-d2c38332a376"
+StandardizedPredictors = "5064a6a7-f8c2-40e2-8bdc-797ec6f1ae18"
